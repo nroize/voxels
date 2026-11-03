@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tel Aviv in voxels</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="app"></div>
+  <header class="card title">
+    <div class="names"><h1 id="city-en">…</h1><span id="city-he" dir="rtl"></span></div>
+    <nav id="city-switch"></nav>
+  </header>
+  <footer class="card bar">
+    <button id="play" title="Play the day">▶</button>
+    <div class="time"><span id="clock">17:36</span><input id="hour" type="range" min="0" max="23.99" step="0.01" aria-label="Time of day" /></div>
+    <select id="month" aria-label="Month"></select>
+    <select id="views" aria-label="Go to"></select>
+    <label class="tog"><input id="show-labels" type="checkbox" checked /> Labels</label>
+  </footer>
+  <div id="loading" class="loading">loading tiles…</div>
+  <div class="credits">
+    <div class="by">by <a href="https://natanel.ca">natanel.ca</a> · <a href="https://github.com/nroize">GitHub</a> · inspired by <a href="https://github.com/stared/warsaw-vibe-voxel">Warsaw in voxels</a> by Piotr Migdał</div>
+    <div>© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors (<span id="osm-date"></span>) · Copernicus GLO-30 DEM <span id="stats"></span></div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

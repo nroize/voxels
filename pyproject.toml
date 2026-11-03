@@ -1,0 +1,14 @@
+[project]
+name = "tlv-voxels-data"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.0",
+    "osmium>=4.0",
+    "pillow>=10.0",
+    "pyproj>=3.6",
+    "rasterio>=1.4",
+    "requests>=2.31",
+    "scipy>=1.13",
+    "shapely>=2.0",
+]
