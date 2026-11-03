@@ -4,6 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tel Aviv in voxels</title>
+  <script>
+    // served under a folder (natanel.ca/voxels/): without the trailing slash the relative paths would miss
+    if (!/\/$|\.html$/.test(location.pathname)) location.replace(location.pathname + '/' + location.search + location.hash);
+  </script>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1l6 3.5-6 3.5-6-3.5z' fill='%23f4efe4'/%3E%3Cpath d='M2 4.5l6 3.5v7l-6-3.5z' fill='%231f6fb2'/%3E%3Cpath d='M14 4.5l-6 3.5v7l6-3.5z' fill='%2314507f'/%3E%3C/svg%3E" />
+  <meta name="description" content="Tel Aviv-Yafo and Rehovot as 1 m voxel dioramas, from OpenStreetMap" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700&display=swap" rel="stylesheet" />
 </head>
