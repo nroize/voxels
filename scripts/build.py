@@ -27,6 +27,7 @@ from shapely import LineString, Point, Polygon, box
 from shapely.ops import polygonize, unary_union
 
 import osm
+import search
 import tiles
 from cities import CITIES, FLOOR
 from palette import Palette, hexrgb, mix, shade
@@ -651,7 +652,7 @@ class City:
             hi.flat[cl] = top
             wpal.flat[cl] = self.pal(wall, wmat)
             rpal.flat[cl] = self.pal(roof)
-            b.update(top=top, g0=g0, wall=wall, wmat=wmat)
+            b.update(top=top, g0=g0, wall=wall, wmat=wmat, wp=int(wpal.flat[cl[0]]), rp=int(rpal.flat[cl[0]]))
             if rshape and rh > 0.5:
                 # a profile from the distance to the footprint edge: hipped / pyramidal / gabled / dome
                 y0, y1, x0, x1 = r.min(), r.max() + 1, cc.min(), cc.max() + 1
@@ -675,11 +676,18 @@ class City:
                 open_ = ~(core | col)
                 lo.flat[cl[open_]] = g0 + 3
                 self.pilotis += 1
-        # stacked parts: each cell spans from the lowest part under it to the highest (the raster above kept one)
+        # stacked and overlapping buildings: the raster above kept one per cell. Where several cover a cell, or one
+        # starts above the ground (parts mapped floor band by floor band, like Azrieli Sarona; a crown mapped as its
+        # own building over a tower's top, like Lev HaIr's), the cell spans from the lowest of them to the highest,
+        # in the colours of the one with the most height
         plo = np.full((D, W), np.iinfo(np.int32).max, np.int32)
         phi = np.zeros((D, W), np.int32)
+        ext = np.zeros((D, W), np.int32)
+        elev = np.zeros((D, W), bool)
+        bwp = np.zeros((D, W), np.int32)
+        brp = np.zeros((D, W), np.int32)
         for i, b in enumerate(info):
-            if not b["part"] or "top" not in b:
+            if "top" not in b:
                 continue
             g = feats[i]["geom"]
             x0, y0, x1, y1 = (int(math.floor(v)) for v in g.bounds)
@@ -691,9 +699,21 @@ class City:
             sl = (slice(y0, y1), slice(x0, x1))
             plo[sl] = np.where(m, np.minimum(plo[sl], bot), plo[sl])
             phi[sl] = np.where(m, np.maximum(phi[sl], b["top"]), phi[sl])
-        stacked = phi > 0
+            if b["part"] or bot > 0:
+                elev[sl] |= m
+            e = b["top"] - max(bot, b["g0"])
+            better = m & (e > ext[sl])
+            ext[sl] = np.where(better, e, ext[sl])
+            bwp[sl] = np.where(better, b["wp"], bwp[sl])
+            brp[sl] = np.where(better, b["rp"], brp[sl])
+        # (only where something floats or a part is involved: two neighbours overlapping along a party wall keep the
+        # raster's choice, or the taller one's height would leak onto the lower one's edge)
+        stacked = (phi > 0) & elev & (bid > 0)
         lo[stacked] = plo[stacked]
         hi[stacked] = np.maximum(hi[stacked], phi[stacked])
+        wpal[stacked] = bwp[stacked]
+        rpal[stacked] = brp[stacked]
+        log(f"bodies: {int(stacked.sum())} cells where buildings stack or overlap")
         self.lo, self.hi, self.wpal, self.rpal, self.radd = lo, hi, wpal, rpal, radd
         # building edges: flat roofs get a parapet in the wall colour; the roof colour shows only inside
         edge = np.zeros((D, W), bool)
@@ -1322,6 +1342,7 @@ def main(key):
     c.views()
     c.out.mkdir(parents=True, exist_ok=True)
     tinfo = c.export()
+    search.export(c, log)
     c.write_meta(tinfo)
     (ROOT / "data").mkdir(exist_ok=True)
     (ROOT / "data" / f"{key}_report.json").write_text(json.dumps(REPORT, indent=1, ensure_ascii=False))

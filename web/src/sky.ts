@@ -63,21 +63,22 @@ export function lighting(el: number) {
 export function skyDome() {
   const geo = new THREE.SphereGeometry(40000, 32, 16);
   const mat = new THREE.ShaderMaterial({
-    side: THREE.BackSide, depthWrite: false, fog: false,
-    uniforms: { zenith: { value: new THREE.Color() }, horizon: { value: new THREE.Color() }, sunDir: { value: new THREE.Vector3(0, 1, 0) }, sunCol: { value: new THREE.Color() }, night: { value: 0 } },
+    side: THREE.BackSide, depthWrite: false, fog: false, transparent: true,
+    uniforms: { zenith: { value: new THREE.Color() }, horizon: { value: new THREE.Color() }, sunDir: { value: new THREE.Vector3(0, 1, 0) }, sunCol: { value: new THREE.Color() }, night: { value: 0 }, sunDisc: { value: 1 }, stars: { value: 1 }, over: { value: 1 } },
     vertexShader: `varying vec3 vDir; void main() { vDir = normalize(position); vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position = p.xyww; }`,
-    fragmentShader: `uniform vec3 zenith, horizon, sunDir, sunCol; uniform float night; varying vec3 vDir;
+    fragmentShader: `uniform vec3 zenith, horizon, sunDir, sunCol; uniform float night, sunDisc, stars, over; varying vec3 vDir;
       float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
       void main() {
         float h = clamp(vDir.y, -0.2, 1.0);
         vec3 c = mix(horizon, zenith, pow(max(h, 0.0), 0.55));
         if (h < 0.0) c = mix(horizon, horizon * 0.7, -h * 5.0);
         float sd = max(dot(normalize(vDir), sunDir), 0.0);
-        c += sunCol * (pow(sd, 900.0) * 6.0 + pow(sd, 12.0) * 0.25) * (1.0 - night);
+        c += sunCol * (pow(sd, 900.0) * 6.0 * sunDisc + pow(sd, 12.0) * 0.25 * (0.3 + 0.7 * sunDisc)) * (1.0 - night);
         vec3 q = floor(normalize(vDir) * 420.0);
-        float st = step(0.9985, hash(q)) * night * smoothstep(0.05, 0.3, h);
+        float st = step(0.9985, hash(q)) * night * stars * smoothstep(0.05, 0.3, h);
         c += vec3(st) * 0.9;
-        gl_FragColor = vec4(c, 1.0);
+        // over: how much of this gradient covers the physical sky beneath (all of it at night and when grey)
+        gl_FragColor = vec4(c, clamp(over + st, 0.0, 1.0));
         #include <colorspace_fragment>
       }`,
   });

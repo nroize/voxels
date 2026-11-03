@@ -2,7 +2,8 @@
 // Data axes: x = column (right), y = row (down the map), z = up. Positions go out in three.js axes (x, z, y),
 // in metres from the node's corner. A tile is N x N cells of s metres plus a 1-cell apron.
 
-export interface MeshRequest { key: string; url: string; N: number; s: number }
+// `buf` instead of `url`: an uncompressed tile built in the page (a building cut out by inspect.ts)
+export interface MeshRequest { key: string; url?: string; buf?: ArrayBuffer; N: number; s: number }
 export type MeshReply =
   | { type: 'mesh'; key: string; pos: Int16Array; attr: Uint8Array; pal: Uint16Array; index: Uint32Array; quads: number; top: number }
   | { type: 'error'; key: string; error: string };
@@ -19,7 +20,7 @@ async function fetchGzip(url: string) {
 self.onmessage = async (e: MessageEvent<MeshRequest>) => {
   const m = e.data;
   try {
-    const buf = await fetchGzip(m.url);
+    const buf = m.buf ?? await fetchGzip(m.url!);
     const out = mesh(buf, m.N, m.s);
     post({ type: 'mesh', key: m.key, ...out }, [out.pos.buffer, out.attr.buffer, out.pal.buffer, out.index.buffer]);
   } catch (err) {
@@ -90,7 +91,7 @@ export function mesh(buf: ArrayBuffer, N: number, s: number) {
           const o0 = um && vm ? 0 : 3 - (um + vm + mm), o1 = up && vm ? 0 : 3 - (up + vm + pm);
           const o2 = um && vp ? 0 : 3 - (um + vp + mp), o3 = up && vp ? 0 : 3 - (up + vp + pp);
           const ao = o0 | (o1 << 2) | (o2 << 4) | (o3 << 6);
-          const g = a === 2 ? 0 : ground[idx % SS];
+          const g = ground[idx % SS];
           mask[i + j * du] = (c * 256 + ao) * 256 + g + 1;
           any = true;
         }

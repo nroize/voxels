@@ -2,6 +2,7 @@
 // the palette texture, baked AO, a little per-voxel jitter, and everything the palette's material byte asks for:
 // windows on facades and towers (lit at night), the sea's waves, lamps, aviation beacons and seasonal blossom.
 import * as THREE from 'three';
+import { CLOUD_GLSL, type cloudUniforms } from './clouds';
 
 export const MAT = {
   plain: 0, facade: 1, glass: 2, stone: 3, sea: 4, water: 5, foliage: 6, lamp: 7,
@@ -16,6 +17,11 @@ export interface VoxelUniforms {
   uMonth: { value: number };     // 1.0 = 1 January .. 12.99
   uSky: { value: THREE.Color };  // reflected in glass and water
   uFloor: { value: number };
+  uWet: { value: number };       // rain on the streets and roofs, 0..1
+  uRain: { value: number };      // falling rain: ripples in the puddles
+  lampTex: { value: THREE.Texture | null }; // street-light pools, 2 m cells over the map (main.ts)
+  uMap: { value: THREE.Vector2 };
+  uSunCol: { value: THREE.Color }; // for the haze towards the sun
 }
 
 export function paletteTexture(pal: [number, number, number, number][]) {
@@ -28,14 +34,15 @@ export function paletteTexture(pal: [number, number, number, number][]) {
   return t;
 }
 
-export function voxelMaterial(pal: THREE.DataTexture, floorH: number) {
+export function voxelMaterial(pal: THREE.DataTexture, floorH: number, clouds: ReturnType<typeof cloudUniforms>) {
   const uniforms: VoxelUniforms = {
     palTex: { value: pal }, uTime: { value: 0 }, uNight: { value: 0 }, uLit: { value: 0.3 }, uMonth: { value: 5.5 },
-    uSky: { value: new THREE.Color(0.6, 0.75, 0.9) }, uFloor: { value: floorH },
+    uSky: { value: new THREE.Color(0.6, 0.75, 0.9) }, uFloor: { value: floorH }, uWet: { value: 0 }, uRain: { value: 0 },
+    lampTex: { value: null }, uMap: { value: new THREE.Vector2(1, 1) }, uSunCol: { value: new THREE.Color(1, 1, 1) },
   };
   const m = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0 });
   m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, uniforms);
+    Object.assign(sh.uniforms, uniforms, clouds);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
         attribute vec4 vattr;
@@ -59,7 +66,12 @@ export function voxelMaterial(pal: THREE.DataTexture, floorH: number) {
         vWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-        uniform float uTime, uNight, uLit, uMonth, uFloor;
+        uniform float uTime, uNight, uLit, uMonth, uFloor, uWet, uRain;
+        uniform sampler2D lampTex;
+        uniform vec2 uMap;
+        uniform vec3 uSunCol;
+        ${CLOUD_GLSL}
+        float gCloud = 1.0;
         uniform vec3 uSky;
         flat varying vec4 vCol;
         flat varying vec3 vN;
@@ -70,11 +82,12 @@ export function voxelMaterial(pal: THREE.DataTexture, floorH: number) {
         float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
         float season(float c, float w) { float d = abs(uMonth - c); d = min(d, 12.0 - d); return clamp(1.0 - d / w, 0.0, 1.0); }
         vec3 gEmit = vec3(0.0);
-        float gRough = 0.9, gMetal = 0.0;
+        float gRough = 0.9, gMetal = 0.0, gEnv = 0.12; // gEnv: how much of the sky's reflection a surface takes
         vec3 gNormalW = vec3(0.0);`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         {
           int mat = int(vCol.a * 255.0 + 0.5);
+          gCloud = cloudShadow(vWorld);
           vec3 c = vCol.rgb;
           vec3 cell = floor(vWorld - vN * 0.5 + 0.001);
           float h = hash3(cell);
@@ -111,11 +124,11 @@ export function voxelMaterial(pal: THREE.DataTexture, floorH: number) {
             } else if (mat == 2) {
               float mu = fract(u / 1.6);
               float mull = max(step(0.9, mu), step(0.93, wf));
-              vec3 panel = mix(c * 0.75, uSky * 0.9, 0.2 + 0.55 * fres);
+              vec3 panel = mix(c * 0.8, uSky * 0.9, 0.08 + 0.2 * fres); // the environment map adds the real reflection
               float lit = step(hash2(vec2(floor(u / 3.2) + vGround * 3.0, fl)), uLit * 0.8);
               c = mix(mix(panel, c * 0.55, mull), panel, 1.0 - detail);
               gEmit = (1.0 - mull) * lit * uNight * vec3(1.0, 0.9, 0.75) * 0.8 * detail + farEmit * vec3(0.85, 1.0, 1.25);
-              gRough = 0.25; gMetal = 0.35;
+              gRough = 0.22; gMetal = 0.08; gEnv = 1.0;
             } else {
               float cu = u / 3.6, wu = fract(cu);
               float win = step(0.36, wu) * step(wu, 0.62) * step(0.34, wf) * step(wf, 0.74);
@@ -130,10 +143,11 @@ export function voxelMaterial(pal: THREE.DataTexture, floorH: number) {
             float w3 = sin(dot(p, vec2(0.37, 0.29)) - uTime * 2.1);
             vec3 nw = normalize(vec3(0.11 * w1 * 0.5 - 0.06 * w2 * 0.4 + 0.2 * w3 * 0.25, 1.0, 0.05 * w1 * 0.5 + 0.17 * w2 * 0.4 + 0.15 * w3 * 0.25));
             if (vN.y > 0.5) gNormalW = nw;
+            gEnv = 1.0;
             c = mix(c, uSky * 0.8, 0.25 * fres) * (0.97 + 0.03 * w3);
             gRough = 0.16;
           } else if (mat == 5) {
-            gRough = 0.2;
+            gRough = 0.2; gEnv = 1.0;
             c = mix(c, uSky, 0.2 * fres);
           } else if (mat == 6 || mat == 8 || mat == 9 || mat == 11) {
             vec3 green = mat == 8 ? vec3(0.36, 0.52, 0.27) : vec3(0.38, 0.55, 0.25);
@@ -153,7 +167,26 @@ export function voxelMaterial(pal: THREE.DataTexture, floorH: number) {
             float open_ = step(0.22, wf) * step(0.18, fract(u / 6.0));
             c = mix(c, c * 0.28, open_ * (1.0 - smoothstep(0.3, 0.8, fwidth(u) / 2.0)));
           } else if (mat == 12) {
-            c = mix(c, uSky, 0.35 * fres); gRough = 0.3;
+            c = mix(c, uSky, 0.35 * fres); gRough = 0.3; gEnv = 1.0;
+          }
+          if (uWet > 0.0 && vN.y > 0.5 && (mat == 0 || mat == 1 || mat == 3)) {
+            // wet: darker, and glossy where water stands (puddles on a 3 m grid of noise)
+            float puddle = smoothstep(0.55, 0.8, hash3(floor(vWorld / 3.0) * vec3(1.0, 0.0, 1.0) + 7.0));
+            c *= 1.0 - 0.3 * uWet;
+            gRough = mix(gRough, mix(0.35, 0.06, puddle), uWet);
+            gEnv = mix(gEnv, 1.0, uWet);
+            c = mix(c, uSky * 0.5, 0.35 * puddle * uWet * fres);
+            // rings where drops land: one per 1.5 m cell, each on its own beat
+            vec2 rc = floor(vWorld.xz / 1.5), rf = fract(vWorld.xz / 1.5) - 0.5;
+            float ph = fract(uTime * 1.1 + hash2(rc));
+            float ring = smoothstep(0.06, 0.0, abs(length(rf + (vec2(hash2(rc + 3.0), hash2(rc + 9.0)) - 0.5) * 0.4) - ph * 0.45)) * (1.0 - ph);
+            float near = 1.0 - smoothstep(0.08, 0.3, fwidth(vWorld.x));
+            c += vec3(0.16) * ring * uRain * near * (0.4 + puddle);
+          }
+          if (uNight > 0.01 && mat != 4) {
+            // the street lights: warm pools on the ground and the bottom of the walls round each lamp
+            float pool = texture(lampTex, vWorld.xz / uMap).r * (1.0 - smoothstep(0.0, 8.0, vWorld.y - vGround));
+            gEmit += c * pool * uNight * vec3(1.0, 0.7, 0.4) * 1.6;
           }
           float ao = mix(0.42, 1.0, vAO * vAO * 0.35 + vAO * 0.65);
           diffuseColor.rgb = c * ao;
@@ -165,9 +198,32 @@ export function voxelMaterial(pal: THREE.DataTexture, floorH: number) {
         metalnessFactor = gMetal;`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         if (gNormalW.y > 0.0) normal = normalize((viewMatrix * vec4(gNormalW, 0.0)).xyz);`)
+      // the sky's environment map only for reflections (glass, water, wet streets): its diffuse light would wash
+      // out the shadows, which the hemisphere light already fills
+      // the clouds' shadows dim the sun (the directional light) only
+      .replace('#include <lights_fragment_begin>', THREE.ShaderChunk.lights_fragment_begin.replace(
+        'getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight ); directLight.color *= gCloud;'))
+      // haze: thicker low down, lit towards the sun (a golden glow at sunset, a bright one in the hamsin)
+      .replace('#include <fog_fragment>', `#ifdef USE_FOG
+          #ifdef FOG_EXP2
+            float fogFactor = 1.0 - exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);
+          #else
+            float fogFactor = smoothstep(fogNear, fogFar, vFogDepth);
+          #endif
+          vec3 vd = normalize(vWorld - cameraPosition);
+          float toSun = pow(max(dot(vd, uSunDir), 0.0), 6.0);
+          vec3 fc = mix(fogColor, uSunCol * 0.85 + fogColor * 0.35, toSun * 0.65);
+          float ff = fogFactor * mix(1.0, 0.7, smoothstep(0.0, 300.0, vWorld.y));
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, fc, ff);
+        #endif`)
+      .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
+        #ifdef USE_ENVMAP
+          iblIrradiance = vec3(0.0);
+          radiance *= gEnv;
+        #endif`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         totalEmissiveRadiance += gEmit;`);
   };
-  m.customProgramCacheKey = () => 'voxel-v1';
+  m.customProgramCacheKey = () => 'voxel-v4';
   return { material: m, uniforms };
 }

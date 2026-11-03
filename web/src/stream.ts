@@ -29,6 +29,8 @@ export class Stream {
   budget = 9_000_000;
   err: number;
   drawn = 0;
+  version = 0; // bumps whenever the set of drawn meshes changes (the shadow map is redrawn then)
+  private drawnKey = '';
   pending = 0;
   private frustum = new THREE.Frustum();
   private m4 = new THREE.Matrix4();
@@ -146,6 +148,8 @@ export class Stream {
     for (const r of this.roots) visit(r);
     for (const n of this.nodes.values()) if (n.mesh) n.mesh.visible = false;
     for (const n of draw) n.mesh!.visible = true;
+    const key = draw.map((n) => n.key).join();
+    if (key !== this.drawnKey) { this.drawnKey = key; this.version++; }
     this.drawn = draw.reduce((a, n) => a + n.quads, 0);
     if (this.quads > this.budget) this.evict(draw);
     this.pump();

@@ -24,12 +24,15 @@ nav { display: flex; gap: 4px; margin-top: 8px; }
 nav a { font-size: 13px; padding: 3px 10px; border-radius: 999px; color: var(--muted); text-decoration: none; border: 1px solid var(--line); }
 nav a.on { background: var(--ink); color: #fff; border-color: var(--ink); }
 nav a:hover:not(.on) { color: var(--ink); border-color: var(--muted); }
+/* the controls: top right on a desktop, along the bottom on a phone (see the media query at the end) */
 .bar {
-  bottom: 16px; left: 0; right: 0; margin: 0 auto; width: fit-content; display: flex; align-items: center; gap: 10px;
-  padding: 8px 12px; max-width: calc(100vw - 32px); flex-wrap: wrap; justify-content: center;
+  top: 16px; right: 16px; display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; max-width: max(300px, calc(100vw - 440px)); flex-wrap: wrap; justify-content: flex-end;
 }
 .bar button { width: 32px; height: 32px; border-radius: 50%; border: 0; background: var(--ink); color: #fff; cursor: pointer; font-size: 12px; }
 .time { display: flex; align-items: center; gap: 8px; }
+.bar .now { width: auto; height: 26px; border-radius: 999px; padding: 0 10px; font: inherit; font-size: 12px; font-weight: 500; background: rgba(29, 36, 48, 0.08); color: var(--ink); }
+.bar .now.on { background: var(--accent); color: #fff; }
 #clock { font-variant-numeric: tabular-nums; font-weight: 500; width: 44px; }
 input[type=range] { width: min(260px, 40vw); accent-color: var(--accent); }
 select { font: inherit; font-size: 14px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.7); color: var(--ink); max-width: 200px; }
@@ -39,10 +42,9 @@ select { font: inherit; font-size: 14px; padding: 5px 8px; border-radius: 8px; b
 .credits a { color: inherit; }
 .credits .by { font-size: 12px; color: rgba(29, 36, 48, 0.85); }
 .credits .by a { font-weight: 500; }
-/* the control bar wraps to two rows below ~900 px: the credits sit above it */
-@media (max-width: 900px) { .credits { bottom: 112px; } }
-@media (max-width: 640px) { .credits { bottom: 104px; left: 10px; font-size: 10px; } .credits .by { font-size: 11px; } }
-.loading { position: fixed; top: 20px; right: 20px; z-index: 5; font-size: 12px; color: var(--muted); opacity: 0; transition: opacity 0.4s; }
+/* main.ts lifts the credits above the control bar when they would overlap */
+@media (max-width: 640px) { .credits { left: 10px; font-size: 10px; } .credits .by { font-size: 11px; } }
+.loading { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 5; font-size: 12px; color: var(--muted); opacity: 0; transition: opacity 0.4s; }
 .loading.on { opacity: 1; }
 .labels { position: fixed; inset: 0; pointer-events: none; z-index: 3; }
 .label {
@@ -54,10 +56,42 @@ select { font: inherit; font-size: 14px; padding: 5px 8px; border-radius: 8px; b
 .label.place { background: none; color: #fff; font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55); }
 .label.place::after { display: none; }
 .label.place .he { text-transform: none; letter-spacing: 0; }
+/* search */
+.search { position: relative; margin-top: 10px; }
+#q { width: min(340px, calc(100vw - 64px)); font: inherit; font-size: 14px; padding: 7px 10px; border-radius: 9px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.85); color: var(--ink); outline: none; }
+#q:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(31, 111, 178, 0.15); }
+#results { position: absolute; left: 0; top: calc(100% + 6px); margin: 0; padding: 4px; list-style: none; width: min(380px, calc(100vw - 48px)); background: #fffdf8; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px rgba(20, 24, 30, 0.18); max-height: 60vh; overflow: auto; z-index: 8; }
+#results li { padding: 7px 9px; border-radius: 7px; cursor: pointer; display: flex; flex-direction: column; gap: 1px; }
+#results li.on, #results li[data-i]:hover { background: rgba(31, 111, 178, 0.1); }
+#results li.none { color: var(--muted); cursor: default; font-size: 13px; }
+.r-l { font-weight: 500; font-size: 14px; }
+.r-s { font-size: 12px; color: var(--muted); }
+/* the selected building */
+.bcard { left: 16px; bottom: 16px; width: min(300px, calc(100vw - 32px)); padding: 12px 14px; font-size: 13.5px; z-index: 6; }
+.bc-head { display: flex; justify-content: space-between; align-items: start; gap: 8px; font-size: 15px; }
+.bc-head .x { border: 0; background: none; font-size: 20px; line-height: 1; cursor: pointer; color: var(--muted); padding: 0; }
+.bc-he { color: var(--muted); margin-top: 2px; }
+.bc-addr { margin-top: 4px; }
+.bc-addr.guess span { font-size: 11.5px; color: var(--muted); font-style: italic; margin-left: 4px; }
+.bc-facts { color: var(--muted); margin-top: 4px; font-size: 12.5px; }
+.bc-facts .est { font-style: italic; }
+.bc-links { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 12.5px; }
+.bc-links a { color: var(--accent); }
+.bcard .iso, .iso-actions button { font: inherit; font-size: 13px; font-weight: 500; border: 0; border-radius: 8px; padding: 6px 12px; background: var(--ink); color: #fff; cursor: pointer; }
+.iso-view { position: fixed; inset: 0; z-index: 20; background: radial-gradient(ellipse at 50% 40%, #f7f3ea, #d9d2c4); }
+.iso-view canvas { position: absolute; inset: 0; }
+.iso-card { top: 16px; left: 16px; width: min(320px, calc(100vw - 32px)); padding: 14px 16px; font-size: 13.5px; }
+.iso-actions { display: flex; gap: 8px; margin-top: 12px; }
+.iso-actions .close { background: rgba(29, 36, 48, 0.1); color: var(--ink); }
+.iso-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+.iso-note { margin: 10px 0 0; font-size: 11.5px; color: var(--muted); }
+.iso-loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 14px; }
 body.no-ui .card, body.no-ui .labels, body.no-ui .credits, body.no-ui .loading { display: none; }
 .fatal { position: fixed; inset: 40px; background: #fff; padding: 20px; z-index: 10; white-space: pre-wrap; }
 @media (max-width: 640px) {
   .title { top: 10px; left: 10px; padding: 8px 12px; }
   h1 { font-size: 18px; }
-  .bar { bottom: 10px; gap: 6px; }
+  .bar { top: auto; bottom: 10px; right: 0; left: 0; margin: 0 auto; width: fit-content; max-width: calc(100vw - 20px); gap: 6px; justify-content: center; }
+  .bcard { bottom: auto; top: 150px; }
+  .loading { bottom: auto; top: 150px; left: auto; right: 14px; transform: none; }
 }

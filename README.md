@@ -8,8 +8,51 @@ Two 1 m voxel dioramas in the MagicaVoxel style, inspired by [stared/warsaw-vibe
 There's a time-of-day slider (with the real sun position for Israel, lit windows, street lamps and the red aviation lights on the towers) and a month selector (jacaranda purple in April–June, royal poinciana red in May–August, oranges on the citrus in winter).
 
 ```sh
-cd web && npm install && npm run dev     # http://localhost:5173  (?city=rehovot&view=azrieli&hour=21&month=5&ui=0)
+cd web && npm install && npm run dev     # http://localhost:5173
 ```
+
+Live at **[natanel.ca/voxels](https://natanel.ca/voxels/)**: GitHub Pages builds every push to `main` (`.github/workflows/pages.yml`), and natanel.ca proxies `/voxels/` to it.
+
+URL options: `?city=rehovot`, `?view=azrieli`, `?hour=21`, `?month=5`, `?weather=rain` (clear, partly, overcast, rain, storm, fog, hamsin, live), `?tilt=1` (miniature), `?labels=0`, `?ui=0`, `?dpr=1` (fix the pixel ratio), `?perf` (GPU time per frame, in `__tlv.perf`).
+
+## Weather and light
+
+**Now**, next to the clock, puts the sun where it is in Israel right now (date and time) and keeps it there until you move the slider.
+
+The weather menu blends between presets over a couple of seconds:
+- **Clouds** (`web/src/clouds.ts`):
+  - A layer of 20 m voxels, ray-traced per pixel at half resolution and drawn behind the city using the depth buffer.
+  - A drifting coverage map (warped, tileable noise) decides which cells are cloud. Little coverage gives scattered cumulus, full coverage a deck with a lumpy, uneven base, and a thick dark layer the towers of a thunderstorm.
+  - The clouds' shadows fall on the city from the same map.
+  - Seen from above, the deck breaks up so the city shows through. Clouds between the camera and what it looks at are cut away.
+- **Rain and Thunderstorm:**
+  - Rain shafts hang under the wettest cells.
+  - Short streaks of rain fall around the camera, and the streets and roofs are wet, with ripples in the puddles.
+  - Lightning flashes inside the clouds.
+- **Fog**, and **Hamsin**: the hot, dusty easterly, a yellow-brown haze with an orange sun.
+- **Now (live)**: the current conditions over the city from [Open-Meteo](https://open-meteo.com/) (CC BY 4.0).
+
+Light:
+- **Sky:** Preetham's scattering model (three's `Sky`), with a gradient over it for night, stars and grey or dusty skies.
+- **Haze:** thicker low down, and lit toward the sun.
+- **Reflections:** the sky as an environment map, for reflections only, on glass, water and wet streets.
+- **Shadows:** the sun's shadow map, plus the clouds' shadows.
+- **Night:** warm pools of light round every street lamp.
+- **Post-processing:** N8AO, bloom, ACES tone mapping and SMAA. **Miniature** adds a tilt-shift blur.
+
+Performance:
+- The shadow map is redrawn only when the sun, the view or the drawn tiles change.
+- The pixel ratio starts at up to 1.5 and drops when frames take longer than ~22 ms.
+- The quadtree refines until a coarse cell would cover under 4 px (`?err=`).
+- `?perf` records GPU time per frame (`__tlv.perf`).
+
+## Search and buildings
+
+- **Search** (top left) finds addresses, streets and places, in Hebrew or English: "Dizengoff 50", "דיזנגוף 50", "Habima". OSM has addresses for only ~750 of the ~12,800 buildings in Tel Aviv (~110 of ~5,900 in Rehovot). A house number that isn't mapped is placed along the street, between the mapped numbers on the same (odd or even) side, and marked ≈ approximate.
+- **Click a building** to see its name, address, height and where the height came from (OSM or estimated). Buildings with no address get the nearest street and an interpolated number, also marked approximate.
+- **Isolate** cuts the building's voxels out of the tiles and shows it alone on a turntable. **Download .vox** saves it for [MagicaVoxel](https://ephtracy.github.io/), up to 256 voxels a side. Windows are drawn by the shader, so the .vox has plain walls.
+
+This uses `buildings.json`, `search.json` and `tiles/b/` (a building id per 1 m column), written by `scripts/search.py`.
 
 ## Rebuild the data
 
